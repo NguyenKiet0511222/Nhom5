@@ -19,24 +19,29 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import com.nhom5.backend.security.RestAuthenticationHandler;
+
 import lombok.RequiredArgsConstructor;
 
 /**
  * Cấu hình bảo mật: API stateless, xác thực bằng JWT Bearer, phân quyền theo prefix URL.
- * Vai trò trong hệ thống: CUSTOMER, SELLER, ADMIN (claim "roles" trong JWT).
+ * Vai trò: CUSTOMER, SELLER, ADMIN — đọc từ claim "role" trong JWT (xem JwtService).
  */
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity // cho phép dùng @PreAuthorize("hasRole('ADMIN')") ở service/controller
+@EnableMethodSecurity // cho phép @PreAuthorize("hasRole('ADMIN')") ở service/controller
 @RequiredArgsConstructor
 public class SecurityConfig {
 
 	private final AppProperties appProperties;
+	private final RestAuthenticationHandler restAuthenticationHandler;
 
-	/** Đường dẫn mở công khai, không cần token. */
+	/** Đường dẫn mở công khai, không cần token. /api/auth/me KHÔNG nằm trong này. */
 	private static final String[] PUBLIC_ENDPOINTS = {
 			"/api/health",
-			"/api/auth/**",
+			"/api/auth/register",
+			"/api/auth/login",
+			"/api/auth/google",
 			"/api-docs/**",
 			"/swagger-ui/**",
 			"/swagger-ui.html"
@@ -55,15 +60,21 @@ public class SecurityConfig {
 						.requestMatchers("/api/admin/**").hasRole("ADMIN")
 						.requestMatchers("/api/seller/**").hasAnyRole("SELLER", "ADMIN")
 						.anyRequest().authenticated())
+				// 401 / 403 trả JSON dạng ApiResponse thay vì body rỗng
+				.exceptionHandling(ex -> ex
+						.authenticationEntryPoint(restAuthenticationHandler)
+						.accessDeniedHandler(restAuthenticationHandler))
 				.oauth2ResourceServer(oauth2 -> oauth2
-						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter())));
+						.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
+						.authenticationEntryPoint(restAuthenticationHandler)
+						.accessDeniedHandler(restAuthenticationHandler));
 		return http.build();
 	}
 
-	/** Đọc claim "roles": ["ADMIN"] trong JWT thành authority ROLE_ADMIN để dùng với hasRole(). */
+	/** Đọc claim "role": "ADMIN" trong JWT thành authority ROLE_ADMIN để dùng với hasRole(). */
 	private JwtAuthenticationConverter jwtAuthenticationConverter() {
 		JwtGrantedAuthoritiesConverter authoritiesConverter = new JwtGrantedAuthoritiesConverter();
-		authoritiesConverter.setAuthoritiesClaimName("roles");
+		authoritiesConverter.setAuthoritiesClaimName("role");
 		authoritiesConverter.setAuthorityPrefix("ROLE_");
 
 		JwtAuthenticationConverter converter = new JwtAuthenticationConverter();

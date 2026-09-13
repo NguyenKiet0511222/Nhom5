@@ -4,12 +4,22 @@
 #   Mac/Linux: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 # (Hoac dat bien moi truong SPRING_PROFILES_ACTIVE=local)
 
+# --- SQL Server (chay resources/db/01_create_database.sql + 02_users.sql truoc) ---
 spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=nongsan_db;encrypt=true;trustServerCertificate=true
 spring.datasource.username=sa
 spring.datasource.password=YourStrong!Passw0rd
+# Neu dung Windows Authentication thay cho sa:
+#spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=nongsan_db;encrypt=true;trustServerCertificate=true;integratedSecurity=true
 
 # Bat khi can xem SQL Hibernate sinh ra
 spring.jpa.show-sql=true
 
+# --- Bao mat ---
 app.jwt.secret=doi-thanh-chuoi-bi-mat-cua-ban-it-nhat-32-ky-tu
+app.admin.email=admin@nongsan.local
+app.admin.password=DoiMatKhauNay@123
+
+# --- Dang nhap Google (Google Cloud Console > APIs & Services > Credentials > OAuth client ID, loai Web) ---
+app.google.client-id=xxxxxxxx.apps.googleusercontent.com
+
 app.ai.base-url=http://localhost:8000

@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * Cần thêm cấu hình mới thì thêm field ở đây thay vì rải @Value khắp nơi.
  */
 @ConfigurationProperties(prefix = "app")
-public record AppProperties(Jwt jwt, Ai ai, Cors cors) {
+public record AppProperties(Jwt jwt, Ai ai, Cors cors, Google google, Admin admin) {
 
 	/** Cấu hình JWT do backend tự phát hành (HS256). */
 	public record Jwt(String secret, long expirationMinutes) {
@@ -21,5 +21,13 @@ public record AppProperties(Jwt jwt, Ai ai, Cors cors) {
 
 	/** Danh sách origin frontend được phép gọi API. */
 	public record Cors(List<String> allowedOrigins) {
+	}
+
+	/** OAuth Client ID trên Google Cloud Console — dùng để xác minh ID token khi đăng nhập Google. */
+	public record Google(String clientId) {
+	}
+
+	/** Tài khoản ADMIN được tạo tự động khi khởi động nếu hệ thống chưa có ADMIN nào. */
+	public record Admin(String email, String password, String fullName) {
 	}
 }
