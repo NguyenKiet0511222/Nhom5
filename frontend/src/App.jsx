@@ -1,56 +1,53 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
 import { CartProvider } from "./context/CartContext";
-import { useCart } from "./context/useCart";
-import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
-import CartDrawer from "./components/CartDrawer";
-import HomePage from "./pages/HomePage";
-import ProductsPage from "./pages/ProductsPage";
-import AIClassifierPage from "./pages/AIClassifierPage";
-import { CheckCircle } from "lucide-react";
+import CustomerLayout from "./layouts/CustomerLayout";
+import DashboardLayout from "./layouts/DashboardLayout";
+import ComingSoon from "./components/ComingSoon";
+import HomePage from "./pages/customer/HomePage";
+import ProductsPage from "./pages/customer/ProductsPage";
+import AIClassifierPage from "./pages/customer/AIClassifierPage";
+import LoginPage from "./pages/auth/LoginPage";
+import RegisterPage from "./pages/auth/RegisterPage";
+import SellerDashboardPage from "./pages/seller/SellerDashboardPage";
+import AdminDashboardPage from "./pages/admin/AdminDashboardPage";
 import "./App.css";
 
-function AppContent() {
-  const { lastAddedItem } = useCart();
-
-  return (
-    <div className="app-layout">
-      {/* Header Điều hướng */}
-      <Navbar />
-
-      {/* Nội dung trang theo Router */}
-      <main className="main-content">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/products" element={<ProductsPage />} />
-          <Route path="/ai-check" element={<AIClassifierPage />} />
-          <Route path="*" element={<HomePage />} />
-        </Routes>
-      </main>
-
-      {/* Slide-over Giỏ hàng toàn cục */}
-      <CartDrawer />
-
-      {/* Thông báo nhanh khi vừa thêm nông sản vào giỏ */}
-      {lastAddedItem && (
-        <div className="toast-notification">
-          <CheckCircle size={18} className="text-emerald" />
-          <span>Đã thêm <strong>{lastAddedItem}</strong> vào giỏ hàng!</span>
-        </div>
-      )}
-
-      {/* Chân trang */}
-      <Footer />
-    </div>
-  );
-}
+// TODO (tuần 3): khi có API đăng nhập, bọc khu seller/admin bằng RequireAuth:
+//   <Route path="/seller" element={<RequireAuth roles={["SELLER", "ADMIN"]}><DashboardLayout role="seller" /></RequireAuth>}>
+//   <Route path="/admin"  element={<RequireAuth roles={["ADMIN"]}><DashboardLayout role="admin" /></RequireAuth>}>
 
 export default function App() {
   return (
     <Router>
-      <CartProvider>
-        <AppContent />
-      </CartProvider>
+      <AuthProvider>
+        <CartProvider>
+          <Routes>
+            {/* Khu khách hàng + trang đăng nhập/đăng ký (CSS thuần, có Navbar/Footer/Giỏ hàng) */}
+            <Route element={<CustomerLayout />}>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/products" element={<ProductsPage />} />
+              <Route path="/ai-check" element={<AIClassifierPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+            </Route>
+
+            {/* Khu người bán (MUI dashboard) */}
+            <Route path="/seller" element={<DashboardLayout role="seller" />}>
+              <Route index element={<SellerDashboardPage />} />
+              <Route path="*" element={<ComingSoon />} />
+            </Route>
+
+            {/* Khu quản trị (MUI dashboard) */}
+            <Route path="/admin" element={<DashboardLayout role="admin" />}>
+              <Route index element={<AdminDashboardPage />} />
+              <Route path="*" element={<ComingSoon />} />
+            </Route>
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </CartProvider>
+      </AuthProvider>
     </Router>
   );
 }

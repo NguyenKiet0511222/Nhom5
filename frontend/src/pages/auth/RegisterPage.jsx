@@ -1,0 +1,111 @@
+import { useState } from "react";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
+import {
+  Alert,
+  Box,
+  Button,
+  Container,
+  Link,
+  MenuItem,
+  Paper,
+  TextField,
+  Typography
+} from "@mui/material";
+import { authApi } from "../../services/api";
+
+const ROLE_OPTIONS = [
+  { value: "CUSTOMER", label: "Khách hàng" },
+  { value: "SELLER", label: "Người bán (cần admin xác minh shop)" }
+];
+
+export default function RegisterPage() {
+  const navigate = useNavigate();
+  const [form, setForm] = useState({ fullName: "", email: "", password: "", role: "CUSTOMER" });
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      await authApi.register(form);
+      navigate("/login", { replace: true });
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          "Đăng ký thất bại. Backend chưa có API /api/auth/register (lộ trình tuần 3)?"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Container maxWidth="xs" sx={{ py: 8 }}>
+      <Paper variant="outlined" sx={{ p: 4 }}>
+        <Typography variant="h5" fontWeight={800} gutterBottom>
+          Tạo tài khoản
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+          Mua nông sản đã kiểm định AI hoặc mở gian hàng của bạn.
+        </Typography>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+
+        <Box component="form" onSubmit={handleSubmit} sx={{ display: "grid", gap: 2 }}>
+          <TextField
+            label="Họ và tên"
+            name="fullName"
+            value={form.fullName}
+            onChange={handleChange}
+            required
+            autoComplete="name"
+          />
+          <TextField
+            label="Email"
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            required
+            autoComplete="email"
+          />
+          <TextField
+            label="Mật khẩu"
+            name="password"
+            type="password"
+            value={form.password}
+            onChange={handleChange}
+            required
+            autoComplete="new-password"
+            slotProps={{ htmlInput: { minLength: 6 } }}
+          />
+          <TextField select label="Bạn là" name="role" value={form.role} onChange={handleChange}>
+            {ROLE_OPTIONS.map((opt) => (
+              <MenuItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button type="submit" variant="contained" size="large" disabled={loading}>
+            {loading ? "Đang tạo tài khoản..." : "Đăng ký"}
+          </Button>
+        </Box>
+
+        <Typography variant="body2" sx={{ mt: 3, textAlign: "center" }}>
+          Đã có tài khoản?{" "}
+          <Link component={RouterLink} to="/login" fontWeight={600}>
+            Đăng nhập
+          </Link>
+        </Typography>
+      </Paper>
+    </Container>
+  );
+}

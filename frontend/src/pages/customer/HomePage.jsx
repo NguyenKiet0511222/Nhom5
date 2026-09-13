@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import { MOCK_PRODUCTS } from "../data/mockProducts";
-import ProductCard from "../components/ProductCard";
+import { MOCK_PRODUCTS } from "../../data/mockProducts";
+import ProductCard from "../../components/ProductCard";
 import {
   Sparkles,
   ArrowRight,

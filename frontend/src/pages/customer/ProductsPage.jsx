@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
-import { MOCK_PRODUCTS, CATEGORIES, AI_GRADES } from "../data/mockProducts";
-import ProductCard from "../components/ProductCard";
+import { MOCK_PRODUCTS, CATEGORIES, AI_GRADES } from "../../data/mockProducts";
+import ProductCard from "../../components/ProductCard";
 import { Search, Filter, Sparkles, RefreshCw } from "lucide-react";
 
 export default function ProductsPage() {

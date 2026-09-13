@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { aiApi } from "../services/api";
-import { SAMPLE_PRODUCE_IMAGES } from "../services/aiService";
+import { aiApi } from "../../services/api";
+import { SAMPLE_PRODUCE_IMAGES } from "../../services/aiService";
 import {
   UploadCloud,
   Sparkles,

@@ -1,0 +1,11 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+
+# Model và dataset không đưa lên git (chia sẻ qua Drive / Kaggle)
+models/*
+!models/.gitkeep
+data/
+notebooks/.ipynb_checkpoints/

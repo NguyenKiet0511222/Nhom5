@@ -9,6 +9,40 @@
   flex: 1;
 }
 
+/* Khu tài khoản trên Navbar (đăng nhập / vai trò / đăng xuất) */
+.auth-actions,
+.auth-login-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-user {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav-link-btn {
+  background: none;
+  border: none;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .nav-user,
+  .auth-login-link span {
+    display: none;
+  }
+}
+
 /* Toast notification for last added item */
 .toast-notification {
   position: fixed;

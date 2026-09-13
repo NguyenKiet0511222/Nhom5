@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useCart } from "../context/useCart";
-import { ShoppingBag, Sparkles, Sprout, Menu, X } from "lucide-react";
+import { useAuth } from "../context/useAuth";
+import { ShoppingBag, Sparkles, Sprout, Menu, X, LogIn, LogOut } from "lucide-react";
 
 export default function Navbar() {
   const { totalCount, setIsCartOpen } = useCart();
+  const { user, hasRole, logout } = useAuth();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -51,6 +53,33 @@ export default function Navbar() {
 
         {/* Action Buttons */}
         <div className="header-actions">
+          {/* Tài khoản: link vào khu seller/admin theo vai trò, hoặc nút đăng nhập */}
+          {user ? (
+            <div className="auth-actions">
+              {hasRole("ADMIN") && (
+                <Link to="/admin" className="nav-link">
+                  Quản trị
+                </Link>
+              )}
+              {hasRole("SELLER") && (
+                <Link to="/seller" className="nav-link">
+                  Kênh người bán
+                </Link>
+              )}
+              <span className="nav-user" title={user.email}>
+                {user.fullName || user.email}
+              </span>
+              <button type="button" className="nav-link nav-link-btn" onClick={logout} aria-label="Đăng xuất">
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <Link to="/login" className="nav-link auth-login-link">
+              <LogIn size={16} />
+              <span>Đăng nhập</span>
+            </Link>
+          )}
+
           <button
             type="button"
             className="cart-button"

@@ -1,0 +1,160 @@
+# CLAUDE.md — Nhóm 5: Sàn nông sản tích hợp AI phân loại chất lượng qua ảnh
+
+Bộ nhớ chung cho Claude Code và thành viên nhóm. Đọc trước khi code. Đổi kiến trúc/quy ước thì sửa file này trong cùng PR.
+Tài liệu gốc (đặc tả + lộ trình 10 tuần): https://docs.google.com/document/d/1P3Km5mr04dpobGkg5GQQJQCycblGKlW9/edit
+
+## 1. Dự án
+
+Sàn TMĐT nông sản **nhiều người bán**. Người bán đăng sản phẩm kèm ảnh → **AI** gắn nhãn (loại nông sản, tươi/hỏng, % tin cậy) → **Admin chỉ kiểm duyệt** (không tự đăng hàng) → khách mua và thấy nhãn chất lượng.
+Vai trò: `CUSTOMER`, `SELLER`, `ADMIN`. Đồ án 10 tuần, mốc kiểm tra tuần 3 / 5 / 7 / 9 (mục 9).
+
+## 2. Kiến trúc — nguyên tắc KHÔNG được vi phạm
+
+```
+React (frontend) ──HTTP/JSON──▶ Spring Boot (backend = cổng duy nhất) ──JPA──▶ SQL Server
+                                          └──────REST──────▶ AI service (Python FastAPI)
+```
+
+- Frontend **chỉ** gọi Spring Boot, và chỉ qua `frontend/src/services/api.js`. Không gọi thẳng AI service, không gọi DB.
+- Spring Boot gọi AI service như một REST API bình thường (`app.ai.base-url`). **AI không được chặn tiến độ web**: AI tắt/lỗi thì vẫn cho đăng sản phẩm, đưa vào hàng chờ admin.
+- Backend chỉ trả JSON (khuôn `ApiResponse`), không render HTML.
+- Ưu tiên chạy được end-to-end (mục tiêu tuần 5) rồi mới tối ưu/làm đẹp.
+
+## 3. Cấu trúc repo
+
+```
+backend/   Spring Boot 4.1.1, Java 21 (pom), Maven wrapper       ← xem mục 5
+frontend/  React 19 + Vite 8, react-router 7, axios, MUI 9         ← xem mục 6
+ai/        Python FastAPI + TensorFlow/Keras (MobileNetV2)          ← xem mục 7
+CLAUDE.md  file này
+```
+
+## 4. Lệnh thường dùng
+
+| Việc | Lệnh |
+|------|------|
+| Backend chạy | `cd backend && mvnw.cmd spring-boot:run` (Mac/Linux `./mvnw`) → http://localhost:8080 |
+| Backend test | `cd backend && mvnw.cmd test` (chạy trên H2, không cần SQL Server) |
+| Swagger | http://localhost:8080/swagger-ui.html — Health: http://localhost:8080/api/health |
+| Frontend | `cd frontend && npm install && npm run dev` → http://localhost:5173 |
+| Frontend lint/build | `npm run lint` · `npm run build` |
+| AI service | `cd ai && python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt && uvicorn app.main:app --reload --port 8000` → http://localhost:8000/docs |
+
+**Cấu hình cục bộ (không commit):**
+- Backend: copy `backend/src/main/resources/application-local.properties.example` → `application-local.properties`, chạy với profile `local` (`-Dspring-boot.run.profiles=local`). Hoặc đặt biến môi trường `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `JWT_SECRET`, `AI_SERVICE_URL`, `CORS_ALLOWED_ORIGINS`.
+- Frontend: copy `frontend/.env.example` → `.env`.
+- AI: copy `ai/.env.example` → `.env`; đặt model vào `ai/models/` (gitignore).
+
+**JDK:** pom đặt `java.version=21`; máy có JDK 24/25 vẫn build được (`--release 21`). Không tự đổi `java.version` khi chưa thống nhất nhóm. Branch `appmod/java-upgrade-*` là của tool nâng cấp Java tự tạo, không làm việc trên đó.
+
+## 5. Backend — quy ước
+
+Package `com.nhom5.backend.*`:
+
+| Package | Chứa gì |
+|---------|---------|
+| `config` | `SecurityConfig` (JWT, CORS, phân quyền theo URL), `JwtConfig` (encoder/decoder HS256), `OpenApiConfig`, `JpaConfig`, `AppProperties` (map `app.*`) |
+| `controller` | `@RestController`, prefix `/api/...`, chỉ nhận request → gọi service → trả `ApiResponse` |
+| `service` | Toàn bộ nghiệp vụ, `@Service @RequiredArgsConstructor @Transactional`; client gọi AI cũng ở đây |
+| `repository` | `JpaRepository<Entity, Long>` mỗi entity một interface |
+| `entity` | `@Entity extends BaseEntity` (id, createdAt, updatedAt tự động) |
+| `dto.request` / `dto.response` | `record`, tên `XxxRequest` / `XxxResponse`; **không** trả entity thẳng ra ngoài |
+| `exception` | `AppException` (có HttpStatus) + `GlobalExceptionHandler` |
+| `security` | (tạo khi làm tuần 3) `JwtTokenService`, `UserDetails`, Google ID-token verifier |
+
+Quy tắc:
+- **Mọi response** là `ApiResponse<T>`: `{ "success": true, "message": null, "data": ... }`. Lỗi: `success=false`, `message` tiếng Việt. Lỗi nghiệp vụ → `throw AppException.notFound("...")`, đừng tự build ResponseEntity lỗi.
+- Validate input bằng `@Valid` + jakarta annotations trên request record, message tiếng Việt.
+- Constructor injection qua Lombok `@RequiredArgsConstructor`; không `@Autowired` trên field.
+- URL & quyền (đã cấu hình trong `SecurityConfig`):
+  - Public: `/api/health`, `/api/auth/**`, `GET /api/products/**`, `GET /api/categories/**`, Swagger.
+  - `/api/seller/**` → `SELLER` hoặc `ADMIN`; `/api/admin/**` → `ADMIN`; còn lại cần đăng nhập.
+  - Kiểm tra sâu hơn (vd: seller chỉ sửa sản phẩm của mình) làm trong service.
+- **JWT**: HS256, secret `app.jwt.secret`; claims `sub` = email, `roles` = `["SELLER"]`, hết hạn `app.jwt.expiration-minutes`. Phát token bằng bean `JwtEncoder` (mẫu trong Javadoc `JwtConfig`). Client gửi `Authorization: Bearer <token>`.
+- **Google login** (tuần 3): frontend lấy ID token từ Google Identity Services → `POST /api/auth/google {idToken}` → backend xác minh với Google (`NimbusJwtDecoder.withJwkSetUri("https://www.googleapis.com/oauth2/v3/certs")`) → tạo/tìm user → trả JWT của mình. Không dùng OAuth2 redirect flow.
+- Response của `/api/auth/login|google`: `{ token, user: { id, fullName, email, roles } }` — frontend `AuthContext` đang dựa vào khuôn này.
+- Test: `@SpringBootTest @ActiveProfiles("test")` (H2), MockMvc cho controller. Mẫu: `HealthControllerTest`.
+
+## 6. Frontend — quy ước
+
+```
+src/
+  pages/customer/   trang khách (Home, Products, AIClassifier)  → CSS THUẦN trong index.css
+  pages/auth/       Login, Register                              → MUI
+  pages/seller/     dashboard người bán                          → MUI
+  pages/admin/      dashboard quản trị                           → MUI
+  layouts/          CustomerLayout (Navbar/Footer/CartDrawer), DashboardLayout (MUI AppBar+Drawer, prop role)
+  components/       dùng chung: ProductCard, Navbar, RequireAuth, StatCardGrid, ComingSoon...
+  context/          pattern 3 file: XxxContext.jsx (Provider) + xxxContextInstance.js + useXxx.js
+  services/api.js   NƠI DUY NHẤT gọi axios; aiService.js chỉ còn mock demo
+  data/             mock data, xoá dần khi có API thật
+  theme.js          theme MUI (màu đồng bộ biến CSS)
+```
+
+- **Khu khách hàng dùng CSS thuần** (design system đã có trong `index.css`, biến `--primary`...), **khu seller/admin/auth dùng MUI**. Không trộn: không nhét MUI vào trang khách, không viết CSS tay dài cho dashboard.
+- Icon: `lucide-react` ở mọi nơi (kể cả trong MUI).
+- Text giao diện + comment: tiếng Việt. Tên biến/hàm/file: tiếng Anh. Component `PascalCase.jsx`, hook `useXxx.js`.
+- Gọi API: thêm hàm vào `services/api.js` theo nhóm (`authApi`, `productApi`, `orderApi`, `aiApi`, sắp tới `sellerApi`, `adminApi`), dùng `unwrap` để lấy `data` từ `ApiResponse`. Interceptor đã tự gắn Bearer token và tự logout khi 401.
+- Auth: `useAuth()` → `{ user, token, isAuthenticated, login, logout, hasRole }`; token trong `localStorage["agri_token"]`. Route cần quyền bọc bằng `<RequireAuth roles={[...]}>` (đang TODO trong `App.jsx`, bật khi có API đăng nhập).
+- Thêm trang dashboard mới: tạo file trong `pages/seller|admin/`, thêm `<Route>` con trong `App.jsx`, thêm mục menu trong `NAV_BY_ROLE` của `DashboardLayout.jsx`.
+- Fallback mock trong `api.js` (products/orders/ai) chỉ để dev không bị chặn — **xoá khi backend có API tương ứng**.
+- Chạy `npm run lint` trước khi PR (oxlint: rules-of-hooks, only-export-components → vì thế context tách 3 file).
+
+## 7. AI service — contract
+
+`POST {app.ai.base-url}/classify`, form-data field `image` → JSON:
+
+```json
+{ "label": "fresh_apple", "produce_type": "apple", "condition": "fresh",
+  "confidence": 0.93, "all_scores": { "...": 0.0 }, "model_version": "mock-0.1" }
+```
+
+- `condition`: `fresh` | `rotten`. `confidence` 0..1.
+- Backend so `confidence` với `app.ai.auto-accept-threshold` (mặc định 0.85): ≥ ngưỡng → tự chấp nhận nhãn; < ngưỡng → hàng chờ admin kiểm định. Admin chỉnh ngưỡng ở tuần 7.
+- Nhãn admin sửa phải được lưu (bảng riêng) để retrain — thiết kế bảng này ngay trong ERD.
+- Không có file model → service chạy mock (ổn định theo hash ảnh). Đổi model không được đổi tên field.
+- Chi tiết chạy/nạp model: `ai/README.md`.
+
+## 8. Database
+
+- SQL Server, tên DB mặc định `nongsan_db`. ERD do **Duy & Hà** thiết kế — **mọi thay đổi bảng/cột phải báo nhóm** trước khi sửa entity.
+- Bảng: `snake_case`, số nhiều (`products`, `order_items`); entity map bằng `@Table(name=...)`, `@Column(name=...)`.
+- Dev dùng `ddl-auto=update` (`JPA_DDL_AUTO`); demo/bảo vệ nên có script SQL tạo bảng + seed trong `backend/src/main/resources/db/` (chưa có).
+
+## 9. Lộ trình & mốc kiểm tra
+
+| Tuần | Web | AI | Mốc |
+|------|-----|----|-----|
+| 1-2 | Chốt đề tài, ERD, đặc tả API (Swagger), khung repo | EDA + tiền xử lý dataset | |
+| 3 | Đăng ký/đăng nhập/Google/JWT (BE+FE) | Train baseline MobileNetV2 6 lớp | ⭐ Demo đăng nhập có token |
+| 4 | API + trang sản phẩm/danh mục; seller đăng sản phẩm | Đóng gói FastAPI | |
+| 5 | Giỏ hàng, đặt hàng, thanh toán, quản lý đơn | Nối Spring Boot ↔ AI | ⭐ Mua hàng end-to-end có nhãn AI |
+| 6 | Admin: dashboard, duyệt sản phẩm, đơn, user, danh mục | Dataset rau củ, train v2 | |
+| 7 | Màn kiểm định AI + ngưỡng tin cậy, hoàn thiện seller, test tích hợp | | ⭐ Toàn hệ thống chạy thông |
+| 8 | Test toàn diện, sửa lỗi, responsive, báo cáo chương 3-4 | | |
+| 9 | Báo cáo chương 1-5, slide, video, Docker (nếu kịp) | | ⭐ Bản hoàn chỉnh |
+| 10 | Sửa theo GVHD, tổng duyệt | | Bảo vệ |
+
+Phân công chi tiết từng tuần: file sheet của nhóm (ngoài repo).
+
+## 10. Git
+
+- Không code trực tiếp trên `main`. Nhánh theo tính năng: `feat/be-auth-jwt`, `feat/fe-seller-products`, `feat/ai-fastapi`, `fix/...`, `docs/...`.
+- Commit: `type(scope): mô tả` — `feat(be): thêm API đăng nhập`, `fix(fe): giỏ hàng mất khi reload`.
+- PR vào `main`, ít nhất 1 người review. Chạy `mvnw.cmd test` và `npm run lint` trước khi mở PR.
+- Không commit: `application-local.properties`, `.env`, `ai/models/*`, dataset, `node_modules`, `target`.
+
+## 11. Không làm
+
+- Không cho frontend gọi thẳng AI service / DB, không thêm biến kiểu `VITE_AI_API_URL`.
+- Không trả entity JPA ra ngoài controller; không trả JSON ngoài khuôn `ApiResponse`.
+- Không dùng thư viện JWT khác (jjwt...) — đã có Nimbus trong Spring Security.
+- Không đổi Spring Boot / Java version, không thêm UI library khác ngoài MUI, khi chưa hỏi nhóm.
+- Không sửa schema DB "cho tiện" mà không báo.
+
+## 12. Trạng thái hiện tại (cập nhật 13/09/2026 — tuần 1)
+
+- Backend: khung config/security/JWT/Swagger/exception/`ApiResponse`/`BaseEntity` + `/api/health`; **chưa có entity, auth, product nào**. Test chạy H2.
+- Frontend: khu khách hàng hoàn chỉnh với mock data; khung MUI cho seller/admin/auth; AuthContext + RequireAuth sẵn nhưng chưa bật guard.
+- AI: khung FastAPI chạy mock; chưa có model.
+- Việc tiếp theo theo lộ trình: ERD + tạo DB (tuần 2) → auth JWT/Google (tuần 3).

@@ -1,0 +1,15 @@
+# Copy file nay thanh application-local.properties (da duoc gitignore) roi sua theo may minh.
+# Chay voi profile local:
+#   Windows:  mvnw.cmd spring-boot:run -Dspring-boot.run.profiles=local
+#   Mac/Linux: ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+# (Hoac dat bien moi truong SPRING_PROFILES_ACTIVE=local)
+
+spring.datasource.url=jdbc:sqlserver://localhost:1433;databaseName=nongsan_db;encrypt=true;trustServerCertificate=true
+spring.datasource.username=sa
+spring.datasource.password=YourStrong!Passw0rd
+
+# Bat khi can xem SQL Hibernate sinh ra
+spring.jpa.show-sql=true
+
+app.jwt.secret=doi-thanh-chuoi-bi-mat-cua-ban-it-nhat-32-ky-tu
+app.ai.base-url=http://localhost:8000
