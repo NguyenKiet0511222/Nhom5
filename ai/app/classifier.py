@@ -13,6 +13,10 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+# QUAN TRỌNG: thứ tự này phải khớp CHÍNH XÁC với train_ds.class_names in ra ở
+# notebooks/01_train_baseline_mobilenetv2.ipynb (Bước 4) — image_dataset_from_directory
+# gán index 0..5 theo thứ tự BẢNG CHỮ CÁI của tên thư mục lớp, không phải thứ tự khai báo ở đây.
+# Train xong, copy đúng danh sách notebook in ra và dán đè vào đây.
 LABELS = [
     "fresh_apple",
     "fresh_banana",
@@ -28,6 +32,7 @@ class ProduceClassifier:
     def __init__(self) -> None:
         self.model = None
         self.version = "mock-0.1"
+        self._preprocess_input = None
 
         model_path = Path(os.getenv("MODEL_PATH", "models/produce_classifier.keras"))
         if model_path.exists():
@@ -36,6 +41,9 @@ class ProduceClassifier:
 
             self.model = tf.keras.models.load_model(model_path)
             self.version = os.getenv("MODEL_VERSION", "mobilenetv2-v1")
+            # PHẢI dùng đúng hàm tiền xử lý lúc train (xem notebook Bước 5), nếu không
+            # model vẫn chạy nhưng đoán sai lung tung dù báo "%" tin cậy cao.
+            self._preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
 
     @property
     def is_loaded(self) -> bool:
@@ -61,10 +69,9 @@ class ProduceClassifier:
         }
 
     def _preprocess(self, image_bytes: bytes) -> np.ndarray:
-        # Phải khớp với cách tiền xử lý lúc train (notebook). Mặc định: scale về [0, 1].
-        # Nếu train bằng tf.keras.applications.mobilenet_v2.preprocess_input thì đổi ở đây.
         img = Image.open(io.BytesIO(image_bytes)).convert("RGB").resize(IMG_SIZE)
-        arr = np.asarray(img, dtype=np.float32) / 255.0
+        arr = np.asarray(img, dtype=np.float32)
+        arr = self._preprocess_input(arr)  # scale về [-1, 1] giống lúc train MobileNetV2
         return np.expand_dims(arr, axis=0)
 
     @staticmethod

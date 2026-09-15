@@ -124,6 +124,14 @@ src/
 - Không có file model → service chạy mock (ổn định theo hash ảnh). Đổi model không được đổi tên field.
 - Chi tiết chạy/nạp model: `ai/README.md`.
 
+**Quyết định cách làm model (chốt 15/09/2026):**
+- Kỹ thuật: **Transfer Learning MobileNetV2** (không train CNN từ đầu, không dùng Cloud Vision API trả phí) — nhẹ, phù hợp đồ án, khớp khung `ai/app/classifier.py` đã viết sẵn.
+- Dữ liệu: bắt đầu bằng dataset Kaggle **"Fruits fresh and rotten for classification"** (baseline tuần 3, 6 lớp táo/chuối/cam × tươi/hỏng) → tuần 6 bổ sung ảnh rau củ Việt Nam tự chụp.
+- Train ở **Google Colab** (GPU miễn phí) — notebook có sẵn: `ai/notebooks/01_train_baseline_mobilenetv2.ipynb`, hướng dẫn từng bước bằng tiếng Việt, tự in ra `class_names` để đồng bộ với `LABELS` trong `classifier.py`.
+- Tiền xử lý ảnh dùng `tf.keras.applications.mobilenet_v2.preprocess_input` — **phải giống hệt** giữa lúc train (notebook) và lúc phục vụ (`classifier.py`), nếu lệch model vẫn chạy nhưng đoán sai.
+- "Điểm độ tươi %" hiển thị trên web = **dùng thẳng `confidence`** model trả về cho nhãn nó chọn — không train model hồi quy điểm số riêng (không có dataset cho việc đó).
+- Giải thích đầy đủ (thuật ngữ, vì sao MobileNetV2, so sánh model, bản đồ bước↔file) cho người chưa biết AI: [`ai/docs/GIAI-THICH-AI.md`](ai/docs/GIAI-THICH-AI.md).
+
 ## 8. Database
 
 - SQL Server, DB `nongsan_db`. ERD do **Duy & Hà** thiết kế — **mọi thay đổi bảng/cột phải báo nhóm** trước khi sửa entity.
