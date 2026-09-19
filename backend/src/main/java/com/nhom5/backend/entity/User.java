@@ -2,6 +2,8 @@ package com.nhom5.backend.entity;
 
 import org.hibernate.annotations.Nationalized;
 
+import com.nhom5.backend.entity.enums.AuthProvider;
+import com.nhom5.backend.entity.enums.Role;
 import com.nhom5.backend.entity.enums.UserStatus;
 
 import jakarta.persistence.Column;

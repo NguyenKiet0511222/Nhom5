@@ -1,7 +1,7 @@
 package com.nhom5.backend.controller;
 
-import com.nhom5.backend.entity.Role;
 import com.nhom5.backend.entity.User;
+import com.nhom5.backend.entity.enums.Role;
 import com.nhom5.backend.entity.enums.UserStatus;
 import com.nhom5.backend.repository.UserRepository;
 import io.swagger.v3.oas.annotations.Operation;

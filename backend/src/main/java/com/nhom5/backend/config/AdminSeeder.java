@@ -5,8 +5,8 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
-import com.nhom5.backend.entity.AuthProvider;
-import com.nhom5.backend.entity.Role;
+import com.nhom5.backend.entity.enums.AuthProvider;
+import com.nhom5.backend.entity.enums.Role;
 import com.nhom5.backend.entity.User;
 import com.nhom5.backend.repository.UserRepository;
 

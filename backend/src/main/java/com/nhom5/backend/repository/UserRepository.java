@@ -9,8 +9,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import com.nhom5.backend.entity.Role;
 import com.nhom5.backend.entity.User;
+import com.nhom5.backend.entity.enums.Role;
 import com.nhom5.backend.entity.enums.UserStatus;
 
 @Repository
