@@ -1,5 +1,3 @@
-import axios from "axios";
-
 // Các mẫu ảnh demo giúp người dùng và giảng viên/hội đồng test ngay không cần chuẩn bị ảnh
 export const SAMPLE_PRODUCE_IMAGES = [
   {
@@ -89,34 +87,13 @@ export const SAMPLE_PRODUCE_IMAGES = [
 ];
 
 /**
- * Hàm phân tích chất lượng nông sản qua hình ảnh
+ * MÔ PHỎNG kết quả AI cho demo khi chưa nối backend (tuần 5 sẽ dùng aiApi.classify trong api.js).
+ * Lưu ý kiến trúc: frontend KHÔNG gọi thẳng AI service — mọi request đi qua Spring Boot.
  * @param {File|string} imageInput - File đối tượng từ input hoặc URL ảnh
  * @param {string} [sampleId] - ID của mẫu ảnh nếu chọn từ danh sách demo
  * @returns {Promise<Object>} Kết quả phân tích chất lượng
  */
 export async function classifyProduceImage(imageInput, sampleId = null) {
-  const backendUrl = import.meta.env.VITE_AI_API_URL;
-
-  // 1. Nếu đã kết nối với Backend AI thực tế (Python FastAPI/Flask hoặc Java/Quarkus)
-  if (backendUrl) {
-    const formData = new FormData();
-    if (imageInput instanceof File) {
-      formData.append("image", imageInput);
-    } else {
-      formData.append("imageUrl", imageInput);
-    }
-
-    try {
-      const response = await axios.post(`${backendUrl}/api/ai/classify`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      return response.data;
-    } catch (err) {
-      console.warn("Chưa thể kết nối tới Backend AI API, chuyển sang chế độ mô phỏng thông minh:", err.message);
-    }
-  }
-
-  // 2. Chế độ mô phỏng AI (Thông minh, phản hồi mượt mà cho đồ án)
   await new Promise((resolve) => setTimeout(resolve, 1000)); // Giả lập độ trễ xử lý Deep Learning Model
 
   // Nếu chọn từ ảnh mẫu có sẵn

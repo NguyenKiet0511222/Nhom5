@@ -1,0 +1,6 @@
+# Phụ thuộc tối thiểu để chạy AI service (chế độ mock khi chưa có model)
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pillow>=10.0
+numpy>=1.26

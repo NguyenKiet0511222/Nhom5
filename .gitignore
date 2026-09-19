@@ -31,3 +31,7 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Cấu hình cục bộ - KHÔNG commit ###
+**/application-local.properties
+.env
