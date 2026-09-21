@@ -1,6 +1,6 @@
 # api.md — Đặc tả API & nghiệp vụ: Website bán nông sản tích hợp AI phân loại chất lượng
 
-> Phiên bản: v1.0 (13/09/2026) · Nguồn: "Phân tích nghiệp vụ và api sơ bộ" của nhóm + các quyết định đã chốt.
+> Phiên bản: v1.1 (21/09/2026) · Nguồn: "Phân tích nghiệp vụ và api sơ bộ" của nhóm + đồng bộ Auth & Route Protection.
 > Tài liệu này là **nguồn sự thật duy nhất** để sinh code. Khi có mâu thuẫn giữa tài liệu này và tài liệu khác, ưu tiên tài liệu này.
 
 ---
@@ -533,3 +533,29 @@ Refresh token · quên mật khẩu qua OTP/email · thanh toán online VNPay/Mo
 3. AI service: `main.py` với `/health`, `/predict` theo mục 5; nếu chưa có model, chạy **chế độ giả lập** trả kết quả ổn định để nhóm web không bị chặn.
 4. Frontend theo mục 8, gọi API đúng hợp đồng; dùng dữ liệu seed để demo.
 5. Kiểm thử luồng chính: đăng ký → đăng ký shop → admin xác minh → người bán đăng sản phẩm + ảnh (thấy nhãn AI) → admin duyệt → khách mua 2 shop 1 lần (tách 2 đơn) → người bán giao → khách đánh giá.
+
+---
+
+## 11. Nhật ký cập nhật & Đồng bộ Codebase (Changelog)
+
+### Phiên bản v1.1 (21/09/2026) — Đồng bộ Auth & Bảo vệ Tuyến đường
+- **Frontend `AuthContext.jsx`**:
+  - Nhận và xử lý trường `accessToken` trả về từ Backend `AuthResponse` (thay vì chỉ `token`), lưu token chuẩn vào `localStorage["agri_token"]`.
+  - Cập nhật logic `hasRole(role)`: So sánh trực tiếp chuỗi đơn lẻ `auth.user?.role === role` (khớp với Enum `Role` của Backend: `CUSTOMER`, `SELLER`, `ADMIN`), đồng thời giữ tương thích ngược với mảng `roles`.
+- **Frontend `LoginPage.jsx`**:
+  - Cập nhật hàm `homeFor(user)` để đọc trực tiếp `user.role` và điều hướng chính xác sau khi đăng nhập:
+    - `ADMIN` → `/admin`
+    - `SELLER` → `/seller`
+    - `CUSTOMER` (mặc định) → `/`
+- **Frontend `RegisterPage.jsx`**:
+  - Bổ sung trường bắt buộc **"Xác nhận mật khẩu" (`confirmPassword`)** và validate mật khẩu trùng khớp ở client trước khi gọi API, khớp 100% với `RegisterRequest` DTO phía Backend.
+  - Loại bỏ dropdown chọn Role vì mọi đăng ký thông thường luôn tạo tài khoản `CUSTOMER` (đăng ký làm người bán sẽ qua API `POST /api/seller/register` riêng).
+- **Frontend Route Protection (`App.jsx`)**:
+  - Bọc component [`RequireAuth`](file:///d:/Đồ%20án%20chuyên%20ngành/Nhom5/frontend/src/components/RequireAuth.jsx) bảo vệ các tuyến đường nội bộ:
+    - Tuyến `/seller`: Bắt buộc vai trò `SELLER` hoặc `ADMIN`.
+    - Tuyến `/admin`: Bắt buộc vai trò `ADMIN`.
+    - Chưa đăng nhập: Tự động điều hướng về `/login` và lưu `location` để redirect lại sau khi đăng nhập thành công.
+    - Sai quyền: Tự động điều hướng về trang chủ `/`.
+- **Backend `application.properties`**:
+  - Cập nhật `app.jwt.expiration-minutes=1440` (24 giờ, tương đương 86.400 giây theo đúng Mục 0.3 và 1.4) giúp phiên đăng nhập ổn định trong quá trình phát triển và kiểm thử.
+
