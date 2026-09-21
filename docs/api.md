@@ -1,6 +1,6 @@
 # api.md — Đặc tả API & nghiệp vụ: Website bán nông sản tích hợp AI phân loại chất lượng
 
-> Phiên bản: v1.1 (21/09/2026) · Nguồn: "Phân tích nghiệp vụ và api sơ bộ" của nhóm + đồng bộ Auth & Route Protection.
+> Phiên bản: v1.2 (21/09/2026) · Nguồn: "Phân tích nghiệp vụ và api sơ bộ" của nhóm + đồng bộ Auth, Route Protection & Phân cấp Tài khoản Premium.
 > Tài liệu này là **nguồn sự thật duy nhất** để sinh code. Khi có mâu thuẫn giữa tài liệu này và tài liệu khác, ưu tiên tài liệu này.
 
 ---
@@ -13,7 +13,7 @@
 | Kho & giao hàng | **Người bán tự giữ hàng, tự giao.** Kho = `products.stock_quantity` do người bán quản lý. Không có kho tập trung, phiếu nhập, lô hàng, FEFO (hướng mở rộng v2). |
 | Giỏ hàng nhiều shop | Cho phép. Khi thanh toán, hệ thống **tự tách thành nhiều đơn con, mỗi người bán một đơn** (cùng `checkoutGroupId`). |
 | Thanh toán | **Chỉ COD** trong v1. Online (VNPay/Momo) là v2. |
-| AI | Module phân loại ảnh nông sản (**tươi / hỏng + % tin cậy**). Gắn vào **ảnh sản phẩm khi người bán đăng** → admin dùng nhãn để duyệt. Khách hàng có thêm chức năng **kiểm tra nhanh** ảnh của mình. |
+| AI | Module phân loại ảnh nông sản (**tươi / hỏng + % tin cậy**). Gắn vào **ảnh sản phẩm khi người bán đăng** → admin dùng nhãn để duyệt. Khách hàng có thêm chức năng **"Kiểm tra AI"** độc lập nhưng chỉ dành cho tài khoản **🔒 Premium** — cơ chế tự nâng cấp chưa làm trong v1 (mục 3.3, 4.7, 9), admin gán thủ công để demo. |
 | Đăng nhập | Email + mật khẩu **hoặc Google OAuth2**. Cả hai đều trả về **JWT** của hệ thống. |
 | Vai trò | `CUSTOMER`, `SELLER`, `ADMIN` (không có role nhân viên riêng). |
 
@@ -21,8 +21,8 @@
 
 | Thành phần | Công nghệ | Cổng |
 |---|---|---|
-| Frontend | ReactJS (Vite) + React Router + Axios; 3 khu vực: `customer/`, `seller/`, `admin/` | 5173 |
-| Backend | Java 17/21, Spring Boot 4, Spring Security + JWT (Nimbus / Resource Server), Spring Data JPA, Bean Validation, springdoc-openapi (Swagger) | 8080 |
+| Frontend | ReactJS 19 (Vite) + React Router 7 + Axios; 3 khu vực: `customer/`, `seller/`, `admin/` | 5173 |
+| Backend | Java 17/21, Spring Boot 4 (hoặc 3.4+), Spring Security + JWT (Nimbus / Resource Server), Spring Data JPA, Bean Validation, springdoc-openapi (Swagger) | 8080 |
 | Database | SQL Server (JDBC `mssql-jdbc`) | 1433 |
 | AI service | Python 3.10+, FastAPI, TensorFlow/Keras (MobileNetV2 transfer learning) | 8000 |
 | Lưu ảnh | Thư mục cục bộ `uploads/` (v1), phục vụ tĩnh tại `GET /uploads/**` | — |
@@ -32,10 +32,10 @@
 ```
 Nhom5/
 ├── frontend/            # React (Vite)
-│   └── src/{api, components, pages/{customer,seller,admin}, hooks, utils, router}
+│   └── src/{api, components, pages/{customer,seller,admin}, context, hooks, utils, layouts}
 ├── backend/             # Spring Boot
-│   └── src/main/java/com/nhom5/backend/{config, security, controller, dto, entity, repository, service, exception, util}
-├── ai/                  # FastAPI + model (thư mục ai trong repo)
+│   └── src/main/java/com/nhom5/backend/{config, security, controller, dto, entity, repository, service, exception}
+├── ai/                  # FastAPI + model MobileNetV2
 │   └── {app/, models/, notebooks/, requirements.txt}
 └── docs/api.md          # tài liệu này
 ```
@@ -49,7 +49,7 @@ Nhom5/
 | `GOOGLE_CLIENT_ID` | Xác thực ID token Google |
 | `AI_SERVICE_URL` (mặc định `http://localhost:8000`) | Gọi AI service |
 | `UPLOAD_DIR` (mặc định `./uploads`), `MAX_FILE_SIZE_MB` = 5 | Lưu ảnh |
-| `CORS_ALLOWED_ORIGINS` = `http://localhost:5173` | CORS |
+| `CORS_ALLOWED_ORIGINS` = `http://localhost:5173` | CORS cho frontend Vite |
 | `SHIPPING_FEE_FLAT` = 20000 | Phí ship cố định / đơn (VND) |
 
 ---
@@ -79,7 +79,7 @@ Lỗi:
 | 200 / 201 | Thành công / tạo mới |
 | 400 | Dữ liệu không hợp lệ (validation) |
 | 401 | Chưa đăng nhập hoặc token sai/hết hạn |
-| 403 | Không đủ quyền / không phải chủ sở hữu |
+| 403 | Không đủ quyền / không phải tài khoản Premium / tài khoản bị khoá |
 | 404 | Không tìm thấy |
 | 409 | Xung đột nghiệp vụ (email đã tồn tại, hết hàng, trạng thái không hợp lệ) |
 | 500 | Lỗi hệ thống |
@@ -92,16 +92,17 @@ Query: `page` (bắt đầu 0), `size` (mặc định 12, tối đa 100), `sort`
 
 ### 1.4 Xác thực
 - Header: `Authorization: Bearer <accessToken>`.
-- JWT HS256, claims: `sub` = userId, `email`, `role`, `iat`, `exp`. Hạn 24h. **Không có refresh token trong v1**.
+- JWT HS256, claims: `sub` = userId (string), `email`, `role`, `iat`, `exp`. Hạn 24h (1440 phút). **Không có refresh token trong v1**.
 - Mật khẩu mã hoá **BCrypt**. Tài khoản Google có `passwordHash = null`.
 
 ### 1.5 Ma trận đường dẫn ↔ quyền (cấu hình `SecurityFilterChain`)
 
 | Đường dẫn | Quyền |
 |---|---|
-| `POST /api/auth/**`, `GET /api/categories/**`, `GET /api/products/**`, `GET /api/shops/{id}`, `GET /uploads/**`, `/swagger-ui/**`, `/v3/api-docs/**` | Công khai |
-| `/api/users/me/**`, `/api/cart/**`, `/api/orders/**`, `/api/ai/**`, `POST /api/products/{id}/reviews`, `POST /api/seller/register` | Đã đăng nhập (mọi role) |
-| `/api/seller/**` (trừ `/register`) | `SELLER` |
+| `POST /api/auth/**`, `GET /api/categories/**`, `GET /api/products/**`, `GET /api/shops/**`, `GET /uploads/**`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/health` | Công khai |
+| `/api/users/me/**`, `/api/cart/**`, `/api/orders/**`, `POST /api/products/{id}/reviews`, `POST /api/seller/register` | Đã đăng nhập (mọi role) |
+| `/api/ai/**` | Đã đăng nhập + **🔒 Yêu cầu tài khoản `PREMIUM`** (mục 3.3, 4.7) |
+| `/api/seller/**` (trừ `/register`) | `SELLER` hoặc `ADMIN` |
 | `/api/admin/**` | `ADMIN` |
 
 ### 1.6 Enum
@@ -109,12 +110,13 @@ Query: `page` (bắt đầu 0), `size` (mặc định 12, tối đa 100), `sort`
 ```
 Role:            CUSTOMER | SELLER | ADMIN
 UserStatus:      ACTIVE | LOCKED
+AccountTier:     STANDARD | PREMIUM       (mặc định STANDARD — mở khoá mục 4.7 AI khách hàng)
 AuthProvider:    LOCAL | GOOGLE
 ShopStatus:      PENDING_VERIFICATION | ACTIVE | LOCKED
 ProductStatus:   DRAFT | PENDING | APPROVED | REJECTED | NEED_INFO | HIDDEN
 HiddenBy:        SELLER | ADMIN
-AiLabel:         FRESH | ROTTEN | UNCERTAIN
 AiSource:        PRODUCT_IMAGE | QUICK_CHECK
+AiLabel:         FRESH | ROTTEN | UNCERTAIN
 AiReviewStatus:  AUTO_ACCEPTED | PENDING_REVIEW | ACCEPTED | CORRECTED | RETAKE_REQUESTED
 OrderStatus:     PENDING | CONFIRMED | PROCESSING | SHIPPING | DELIVERED | CANCELLED
 PaymentMethod:   COD
@@ -131,13 +133,13 @@ Mọi bảng có `created_at DATETIME2 DEFAULT SYSDATETIME()`, `updated_at DATET
 
 | Bảng | Cột chính | Ghi chú |
 |---|---|---|
-| `users` | full_name NVARCHAR(100); email NVARCHAR(150) UNIQUE; phone VARCHAR(20) NULL; password_hash NVARCHAR(255) NULL; provider (LOCAL/GOOGLE); provider_id NVARCHAR(255) NULL; role; status; avatar_url NVARCHAR(500) NULL | |
+| `users` | full_name NVARCHAR(100); email NVARCHAR(150) UNIQUE; phone VARCHAR(20) NULL; password_hash NVARCHAR(255) NULL; provider (LOCAL/GOOGLE); provider_id NVARCHAR(255) NULL; role; status; **account_tier (STANDARD/PREMIUM) DEFAULT 'STANDARD'**; avatar_url NVARCHAR(500) NULL | `account_tier` gác cổng tính năng AI khách hàng — mục 3.3, 4.7 |
 | `shops` | user_id UNIQUE FK→users; shop_name NVARCHAR(150); description NVARCHAR(MAX); province NVARCHAR(100); address NVARCHAR(255); phone; logo_url; status; rating_avg DECIMAL(2,1) DEFAULT 0; rating_count INT DEFAULT 0; verified_at NULL | 1 user ↔ 1 shop |
 | `addresses` | user_id FK; receiver_name; phone; province; district; ward; street NVARCHAR(255); is_default BIT | Sổ địa chỉ khách |
 | `categories` | name; slug UNIQUE; parent_id NULL FK→categories; description; image_url; display_order INT; is_active BIT; ai_produce_keys VARCHAR(255) NULL | Cây 2 cấp. `ai_produce_keys` ví dụ `"tomato,potato,carrot"` |
 | `products` | shop_id FK; category_id FK; name NVARCHAR(200); slug UNIQUE; description NVARCHAR(MAX); price BIGINT; unit NVARCHAR(20); stock_quantity INT; origin NVARCHAR(150); status; hidden_by NULL; reject_reason NVARCHAR(500) NULL; ai_overall_label NULL; ai_overall_confidence DECIMAL(5,4) NULL; sold_count INT DEFAULT 0; rating_avg DECIMAL(2,1) DEFAULT 0; rating_count INT DEFAULT 0; approved_at NULL | |
 | `product_images` | product_id FK; url NVARCHAR(500); display_order INT; is_primary BIT | Xoá sản phẩm → xoá ảnh (cascade) |
-| `ai_results` | source; product_image_id NULL FK; user_id NULL FK (người tải ảnh); image_url; produce VARCHAR(50); label; confidence DECIMAL(5,4); model_version VARCHAR(50); review_status; final_label NULL; reviewed_by NULL FK→users; reviewed_at NULL; note NVARCHAR(500) NULL; inference_ms INT | 1 ảnh sản phẩm ↔ 1 kết quả mới nhất |
+| `ai_results` | source (PRODUCT_IMAGE/QUICK_CHECK); product_image_id NULL FK→product_images; user_id NULL FK→users (người tải ảnh, chỉ khi QUICK_CHECK); image_url; produce VARCHAR(50); label; confidence DECIMAL(5,4); model_version VARCHAR(50); review_status; final_label NULL; reviewed_by NULL FK→users; reviewed_at NULL; note NVARCHAR(500) NULL; inference_ms INT | 2 nguồn: ảnh sản phẩm (product_image_id, 1 ảnh ↔ 1 kết quả mới nhất) hoặc khách Premium tự kiểm tra (user_id, mục 4.7) |
 | `cart_items` | user_id FK; product_id FK; quantity INT; UNIQUE(user_id, product_id) | Không cần bảng carts |
 | `orders` | order_code VARCHAR(20) UNIQUE; checkout_group_id VARCHAR(36); user_id FK; shop_id FK; status; payment_method; payment_status; receiver_name; phone; shipping_address NVARCHAR(500); note NVARCHAR(500) NULL; subtotal BIGINT; shipping_fee BIGINT; total BIGINT; cancel_reason NULL; confirmed_at, delivered_at, cancelled_at NULL | **1 đơn = 1 shop** |
 | `order_items` | order_id FK; product_id FK; product_name (snapshot); unit; price BIGINT (snapshot); quantity INT; subtotal BIGINT; ai_label_snapshot NULL | Snapshot tại thời điểm đặt |
@@ -145,7 +147,7 @@ Mọi bảng có `created_at DATETIME2 DEFAULT SYSDATETIME()`, `updated_at DATET
 | `reviews` | product_id FK; user_id FK; order_id FK; rating TINYINT (1–5); comment NVARCHAR(1000); UNIQUE(product_id, user_id, order_id) | Chỉ khi đơn DELIVERED |
 | `settings` | [key] VARCHAR(50) PK; [value] NVARCHAR(255) | Seed: `ai.auto_accept_threshold=0.90`, `ai.review_threshold=0.70`, `ai.model_version=mobilenetv2_v1` |
 
-Quan hệ chính: `users 1–1 shops`, `shops 1–n products`, `products 1–n product_images 1–1 ai_results`, `users 1–n orders`, `shops 1–n orders`, `orders 1–n order_items`, `products 1–n reviews`.
+Quan hệ chính: `users 1–1 shops`, `shops 1–n products`, `products 1–n product_images 1–1 ai_results`, `users 1–n ai_results` (QUICK_CHECK, chỉ tài khoản Premium), `users 1–n orders`, `shops 1–n orders`, `orders 1–n order_items`, `products 1–n reviews`.
 
 `order_code`: `DH-{yyyy}-{5 chữ số tăng dần}` ví dụ `DH-2026-01187`.
 
@@ -154,7 +156,7 @@ Quan hệ chính: `users 1–1 shops`, `shops 1–n products`, `products 1–n p
 ## 3. Quy tắc nghiệp vụ
 
 ### 3.1 Tài khoản
-- Email là định danh duy nhất. Đăng ký thường tạo `role = CUSTOMER`, `provider = LOCAL`, `status = ACTIVE`.
+- Email là định danh duy nhất. Đăng ký thường tạo `role = CUSTOMER`, `provider = LOCAL`, `status = ACTIVE`, `account_tier = STANDARD`.
 - Đăng nhập Google: backend xác thực ID token với Google (`GOOGLE_CLIENT_ID`). Email chưa có → tạo user `provider = GOOGLE`, `password_hash = null`. Email đã có → đăng nhập vào user đó và cập nhật `provider_id` nếu trống.
 - Tài khoản `LOCKED` → mọi request trả 403 `"Tài khoản đã bị khoá"`.
 - Muốn bán hàng: user đã đăng nhập gọi `POST /api/seller/register` tạo `shop` (PENDING_VERIFICATION). Admin xác minh → `shop.status = ACTIVE` **và** `user.role = SELLER`. Trước khi xác minh, user vẫn là CUSTOMER và không vào được `/api/seller/**`.
@@ -176,7 +178,9 @@ Quan hệ chính: `users 1–1 shops`, `shops 1–n products`, `products 1–n p
   - còn lại → `AUTO_ACCEPTED`
 - `confidence < review_threshold` → `label` lưu là `UNCERTAIN` (giữ nhãn gốc của mô hình trong `note`).
 - Admin xử lý hàng chờ: `ACCEPT` (giữ nhãn AI), `CORRECT` (đặt `final_label`), `RETAKE` (yêu cầu chụp lại → sản phẩm chuyển `NEED_INFO`). Nhãn dùng để hiển thị = `final_label ?? label`.
-- Kiểm tra nhanh của khách (`QUICK_CHECK`): lưu lịch sử theo `user_id`, **không** ảnh hưởng sản phẩm. Giới hạn 20 lượt/ngày/user → vượt trả 429 (tuỳ chọn, ưu tiên thấp).
+- **Kiểm tra nhanh của khách (QUICK_CHECK, mục 4.7)**: tính năng **🔒 Premium** — chỉ tài khoản `account_tier = PREMIUM` mới gọi được `POST /api/ai/classify` và `GET /api/ai/history`. Tài khoản `STANDARD` gọi 2 endpoint này → 403 `{ "success": false, "message": "Tính năng dành cho tài khoản Premium" }`. Kết quả lưu vào `ai_results` với `user_id` của khách, **không** gắn vào sản phẩm nào và không ảnh hưởng `ai_overall_label`. Giới hạn 20 lượt/ngày/user (tuỳ chọn, chống spam mô hình).
+- **Cơ chế nâng cấp lên Premium chưa xây dựng trong v1** (mục 9). `account_tier` mặc định `STANDARD` cho mọi tài khoản kể cả seed data. Trước mắt, admin có thể gán thủ công qua `PATCH /admin/users/{id}/tier` (mục 4.9) để demo tính năng.
+- Công cụ kiểm tra nhanh riêng của admin (mục 4.9, `POST /admin/ai/classify`) không tính vào giới hạn trên và không lưu lịch sử — chỉ để thử mô hình.
 
 ### 3.4 Giỏ hàng & đặt hàng
 - Chỉ thêm được sản phẩm `APPROVED` của shop `ACTIVE`; `quantity ≤ stock_quantity`.
@@ -213,7 +217,7 @@ Ký hiệu quyền: 🌐 công khai · 🔑 đã đăng nhập · 🛒 SELLER ·
 
 | Method | Endpoint | Quyền | Mô tả |
 |---|---|---|---|
-| POST | `/auth/register` | 🌐 | Đăng ký bằng email/mật khẩu |
+| POST | `/auth/register` | 🌐 | Đăng ký bằng email/mật khẩu (luôn tạo CUSTOMER, tier STANDARD) |
 | POST | `/auth/login` | 🌐 | Đăng nhập, trả JWT |
 | POST | `/auth/google` | 🌐 | Đăng nhập bằng Google ID token |
 | GET | `/auth/me` | 🔑 | Thông tin user hiện tại (từ token) |
@@ -234,13 +238,21 @@ Validation: `fullName` 2–100 ký tự; `email` đúng định dạng; `phone` 
   "accessToken": "eyJhbGciOi...",
   "tokenType": "Bearer",
   "expiresIn": 86400,
-  "user": { "id": 12, "fullName": "Trần Thị Mai", "email": "mai@gmail.com", "role": "CUSTOMER", "avatarUrl": null, "shopId": null }
+  "user": {
+    "id": 12,
+    "fullName": "Trần Thị Mai",
+    "email": "mai@gmail.com",
+    "role": "CUSTOMER",
+    "accountTier": "STANDARD",
+    "avatarUrl": null,
+    "shopId": null
+  }
 }
 ```
 
 **POST /auth/google** — body `{ "idToken": "<Google ID token từ frontend>" }`. Token không hợp lệ → 401. Response **giống hệt** `/auth/login`.
 
-**GET /auth/me** — response: `{ "id", "fullName", "email", "phone", "role", "provider", "avatarUrl", "shopId", "shopStatus" }` (`shopId`/`shopStatus` null nếu chưa đăng ký bán).
+**GET /auth/me** — response: `{ "id", "fullName", "email", "phone", "role", "accountTier", "provider", "avatarUrl", "shopId", "shopStatus" }` (`shopId`/`shopStatus` null nếu chưa đăng ký bán).
 
 **PUT /auth/change-password** — body `{ "currentPassword", "newPassword", "confirmPassword" }`.
 
@@ -358,17 +370,23 @@ Order (detail):
   "createdAt": "...", "confirmedAt": "...", "deliveredAt": null, "cancelledAt": null, "cancelReason": null }
 ```
 
-### 4.7 AI – khách hàng (`/api/ai`) 🔑
+### 4.7 AI – khách hàng (`/api/ai`) 🔑 + 🔒 Premium
+
+> Yêu cầu `account_tier = PREMIUM` (mục 3.3). **v1 chưa có luồng tự nâng cấp** — chỉ admin gán thủ công (`/admin/users/{id}/tier`, mục 4.9) để demo; xem mục 9.
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| POST | `/ai/classify` | Kiểm tra nhanh 1 ảnh (multipart `file`) |
+| POST | `/ai/classify` | Kiểm tra nhanh 1 ảnh (multipart `file` hoặc `image`) |
 | GET | `/ai/history` | Lịch sử kiểm tra của tôi (phân trang) |
 | GET | `/ai/history/{id}` | Chi tiết 1 lần (chỉ của mình) |
 
-**POST /ai/classify** response:
+**POST /ai/classify** response 201:
 ```json
 { "id": 9021, "imageUrl": "/uploads/ai/9021.jpg", "produce": "tomato", "label": "FRESH", "confidence": 0.94, "modelVersion": "mobilenetv2_v1", "inferenceMs": 180, "createdAt": "..." }
+```
+Tài khoản `STANDARD` gọi endpoint trên → 403:
+```json
+{ "success": false, "message": "Tính năng dành cho tài khoản Premium" }
 ```
 
 ### 4.8 Người bán (`/api/seller`) 🛒
@@ -441,8 +459,9 @@ Validation: `name` 3–200; `price` > 0; `stockQuantity` ≥ 0; `unit` 1–20; `
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| GET | `/admin/users` | Query: `role`, `status`, `keyword`, `page`, `size` → `{ id, fullName, email, phone, role, status, provider, createdAt, shop: { id, shopName, status } \| null }` |
+| GET | `/admin/users` | Query: `role`, `status`, `keyword`, `page`, `size` → `{ id, fullName, email, phone, role, status, accountTier, provider, createdAt, shop: { id, shopName, status } \| null }` |
 | PATCH | `/admin/users/{id}/status` | `{ "action": "LOCK" \| "UNLOCK" }` (không tự khoá chính mình) |
+| PATCH | `/admin/users/{id}/tier` | `{ "tier": "STANDARD" \| "PREMIUM" }` — gán thủ công cấp tài khoản; **giải pháp demo cơ chế Premium** (mục 3.3/9) |
 | POST | `/admin/users` | Tạo tài khoản ADMIN khác `{ fullName, email, password }` |
 | GET | `/admin/shops` | Query: `status`, `keyword`, `province`, `page`, `size` → kèm `productCounts: { approved, pending, rejected }`, `orderCount`, `ratingAvg` |
 | GET | `/admin/shops/{id}` | Chi tiết shop + chủ shop |
@@ -458,7 +477,7 @@ Validation: `name` 3–200; `price` > 0; `stockQuantity` ≥ 0; `unit` 1–20; `
 | GET | `/admin/ai/results/{id}` | Chi tiết |
 | PATCH | `/admin/ai/results/{id}/review` | `{ "action": "ACCEPT" \| "CORRECT" \| "RETAKE", "finalLabel": "FRESH" \| "ROTTEN", "note" }` — `finalLabel` bắt buộc với CORRECT; RETAKE → sản phẩm NEED_INFO |
 | PATCH | `/admin/ai/results/accept-bulk` | `{ "minConfidence": 0.95 }` chấp nhận mọi kết quả PENDING_REVIEW có label FRESH ≥ ngưỡng |
-| POST | `/admin/ai/classify` | Kiểm tra nhanh của admin (multipart `file`, không lưu lịch sử) |
+| POST | `/admin/ai/classify` | Kiểm tra nhanh của admin (multipart `file` hoặc `image`, không lưu lịch sử) |
 | GET / PUT | `/admin/ai/settings` | `{ "autoAcceptThreshold": 0.90, "reviewThreshold": 0.70, "modelVersion": "mobilenetv2_v1" }` |
 | GET | `/admin/ai/statistics?from=&to=` | `{ "totalClassified", "byLabel": { "FRESH": 1100, "ROTTEN": 95, "UNCERTAIN": 45 }, "avgConfidence": 0.91, "pendingReview": 32, "correctedByAdmin": 12 }` |
 
@@ -481,7 +500,7 @@ Backend là **client duy nhất** của AI service (frontend không gọi thẳn
 ```
 - AI service tự tách tên lớp của dataset (ví dụ `freshapples`, `rottenbanana`, `Tomato__Rotten`) thành `produce` (chữ thường, tiếng Anh, số ít) và `label` ∈ `fresh | rotten`. Backend map `fresh → FRESH`, `rotten → ROTTEN`, và áp ngưỡng (mục 3.3).
 - Lỗi ảnh → 400 `{ "detail": "Invalid image" }`. Backend timeout 5 giây.
-- Tiền xử lý bên trong service: resize 224×224, RGB, `preprocess_input` của MobileNetV2. Model file: `models/produce_classifier.keras` + `models/classes.json`.
+- Tiền xử lý bên trong service: resize 224×224, RGB, `preprocess_input` của MobileNetV2. Model file: `models/produce_classifier.keras` (hoặc `model.keras`) + `models/classes.json`.
 - Giai đoạn 1 mô hình 6 lớp (táo, chuối, cam × tươi/hỏng); giai đoạn 2 mở rộng 28 lớp. Hợp đồng API **không đổi** khi đổi mô hình.
 
 ---
@@ -494,11 +513,11 @@ Backend là **client duy nhất** của AI service (frontend không gọi thẳn
 
 ---
 
-## 7. Dữ liệu mẫu (seed khi chạy lần đầu, `CommandLineRunner` hoặc `data.sql`)
+## 7. Dữ liệu mẫu (seed khi chạy lần đầu, `CommandLineRunner` hoặc `AdminSeeder`)
 
 | Loại | Dữ liệu |
 |---|---|
-| Admin | `admin@nongsan.vn` / `Admin@123` |
+| Admin | `admin@nongsan.local` (hoặc `admin@nongsan.vn`) / `Admin@123` |
 | Người bán (shop ACTIVE) | `taman@nongsan.vn` / `Seller@123` — shop "Vườn rau Tâm An" (Lâm Đồng); `caolanh@nongsan.vn` / `Seller@123` — "HTX Xoài Cao Lãnh" (Đồng Tháp) |
 | Người bán chờ xác minh | `mocchau@nongsan.vn` / `Seller@123` — "Vườn dâu Mộc Châu" (PENDING_VERIFICATION) |
 | Khách | `mai@nongsan.vn` / `Customer@123`, `nam@nongsan.vn` / `Customer@123` |
@@ -512,50 +531,58 @@ Backend là **client duy nhất** của AI service (frontend không gọi thẳn
 
 | Khu vực | Trang |
 |---|---|
-| Khách hàng (`/`) | Trang chủ (danh mục + sản phẩm nổi bật) · Danh sách/tìm kiếm · Chi tiết sản phẩm (ảnh + nhãn AI, đánh giá) · Trang shop · Giỏ hàng (nhóm theo shop) · Thanh toán (chọn địa chỉ, COD) · Đơn hàng của tôi + chi tiết + huỷ · Hồ sơ, sổ địa chỉ, đổi mật khẩu · Kiểm tra nhanh AI + lịch sử · Đăng ký / đăng nhập (email + nút Google) · Đăng ký bán hàng |
+| Khách hàng (`/`) | Trang chủ (danh mục + sản phẩm nổi bật) · Danh sách/tìm kiếm · Chi tiết sản phẩm (ảnh + nhãn AI, đánh giá) · Trang shop · Giỏ hàng (nhóm theo shop) · Thanh toán (chọn địa chỉ, COD) · Đơn hàng của tôi + chi tiết + huỷ · Hồ sơ, sổ địa chỉ, đổi mật khẩu · **Kiểm tra AI (🔒 Premium) + lịch sử** · Đăng ký / đăng nhập (email + nút Google) · Đăng ký bán hàng |
 | Người bán (`/seller`) | Tổng quan · Sản phẩm (danh sách theo trạng thái, tạo/sửa, upload ảnh → thấy nhãn AI, submit) · Đơn hàng của shop + đổi trạng thái · Thông tin shop · Kết quả AI của shop |
-| Admin (`/admin`) | Tổng quan · Sản phẩm (duyệt, có nhãn AI) + chi tiết duyệt · Đơn hàng + chi tiết · Người dùng (khách / người bán / admin) · Shop (xác minh, khoá) · Danh mục · Kiểm định AI (hàng chờ, kiểm tra nhanh, ngưỡng) — theo wireframe đã có |
+| Admin (`/admin`) | Tổng quan · Sản phẩm (duyệt, có nhãn AI) + chi tiết duyệt · Đơn hàng + chi tiết · Người dùng (khách / người bán / admin) · Shop (xác minh, khoá) · Danh mục · Kiểm định AI (hàng chờ, kiểm tra nhanh, ngưỡng) — theo 5 wireframe đã duyệt |
 
-Quy ước frontend: lưu JWT trong `localStorage`; Axios interceptor gắn header và tự đăng xuất khi 401; route guard theo `role`; hiển thị nhãn AI bằng badge (FRESH = viền, ROTTEN = nền tối, UNCERTAIN = nét đứt).
+Quy ước frontend:
+- Lưu JWT trong `localStorage["agri_token"]`; Axios interceptor gắn header `Authorization: Bearer <token>` và tự đăng xuất khi 401 (trừ API `/auth/**`);
+- Route guard theo `role` (sử dụng component `RequireAuth`);
+- Hiển thị nhãn AI bằng badge: FRESH = viền xanh, ROTTEN = nền tối/viền đỏ cảnh báo, UNCERTAIN = nét đứt vàng;
+- **Mục "Kiểm tra AI" trên Navbar**: luôn hiển thị trong menu khách hàng. Nếu tài khoản `STANDARD` bấm vào thì hiển thị biểu tượng khoá 🔒 + thông báo tính năng dành riêng cho tài khoản Premium thay vì mở form tải ảnh (không ẩn hẳn để khách nhận biết tính năng tồn tại).
 
 ---
 
 ## 9. Ngoài phạm vi v1 (để dành v2)
 
-Refresh token · quên mật khẩu qua OTP/email · thanh toán online VNPay/Momo · mã khuyến mãi · danh sách yêu thích · sản phẩm liên quan · thông báo trong app/email · kho tập trung + kiểm định AI lúc nhập kho + lô hàng/hạn dùng/FEFO · đối soát & hoa hồng người bán · chat khách–người bán · đơn vị vận chuyển tích hợp API.
+Refresh token · quên mật khẩu qua OTP/email · thanh toán online VNPay/Momo · mã khuyến mãi · danh sách yêu thích · sản phẩm liên quan · thông báo trong app/email · kho tập trung + kiểm định AI lúc nhập kho + lô hàng/hạn dùng/FEFO · đối soát & hoa hồng người bán · chat khách–người bán · đơn vị vận chuyển tích hợp API · **cơ chế tự động nâng cấp tài khoản lên Premium** (cổng thanh toán hoặc tiêu chí tích điểm/mua hàng — schema `account_tier` và API `/api/ai/classify`, `/api/ai/history` đã sẵn sàng ở mục 3.3/4.7; trong v1 admin sẽ gán thủ công qua `PATCH /admin/users/{id}/tier` để demo tính năng).
 
 ---
 
 ## 10. Checklist cho phát triển hệ thống
 
-1. Tạo skeleton thư mục, file cấu hình môi trường.
+1. Tạo skeleton 3 thư mục (`frontend`, `backend`, `ai`), file cấu hình môi trường.
 2. Backend: entity + repository theo mục 2 → security/JWT + Google (4.1) → upload & AI client (5, 6) → seller products/images (4.8) → cart/checkout/orders (4.5, 4.6, 3.4, 3.5) → admin (4.9) → seed (7) → Swagger.
-3. AI service: `main.py` với `/health`, `/predict` theo mục 5; nếu chưa có model, chạy **chế độ giả lập** trả kết quả ổn định để nhóm web không bị chặn.
-4. Frontend theo mục 8, gọi API đúng hợp đồng; dùng dữ liệu seed để demo.
-5. Kiểm thử luồng chính: đăng ký → đăng ký shop → admin xác minh → người bán đăng sản phẩm + ảnh (thấy nhãn AI) → admin duyệt → khách mua 2 shop 1 lần (tách 2 đơn) → người bán giao → khách đánh giá.
+3. AI khách hàng (mục 4.7): gác cổng bằng `account_tier = PREMIUM`; admin có API gán tier để demo.
+4. AI service: `app/main.py` với `/health`, `/predict` theo mục 5; nếu chưa có model, chạy **chế độ giả lập** trả kết quả ổn định để nhóm web không bị chặn.
+5. Frontend theo mục 8, gọi API đúng hợp đồng; dùng dữ liệu seed và mock để demo.
+6. Kiểm thử luồng chính: đăng ký → đăng ký shop → admin xác minh → người bán đăng sản phẩm + ảnh (thấy nhãn AI) → admin duyệt → khách mua 2 shop 1 lần (tách 2 đơn) → người bán giao → khách đánh giá.
 
 ---
 
 ## 11. Nhật ký cập nhật & Đồng bộ Codebase (Changelog)
 
+### Phiên bản v1.2 (21/09/2026) — Hợp nhất Cơ chế Tài khoản Premium & Chuẩn hoá Monorepo
+- **Cơ chế Phân cấp Tài khoản (AccountTier)**:
+  - Thêm enum `AccountTier: STANDARD | PREMIUM` (mặc định `STANDARD` cho mọi tài khoản đăng ký mới).
+  - Thêm cột `account_tier` vào bảng `users`.
+  - Giới hạn tính năng "Kiểm tra AI của khách hàng" (`POST /api/ai/classify` và `GET /api/ai/history`): bắt buộc `account_tier = PREMIUM`. Tài khoản `STANDARD` nhận lỗi 403.
+  - Bổ sung API Quản trị viên: `PATCH /admin/users/{id}/tier` để gán cấp bậc tài khoản thủ công phục vụ demo đồ án.
+  - Cập nhật quy ước Frontend: hiển thị biểu tượng khoá 🔒 và popup/thông báo mời nâng cấp Premium cho tài khoản `STANDARD` khi truy cập trang Kiểm định AI khách hàng.
+- **Đồng bộ Kỹ thuật Monorepo**:
+  - Bảo toàn cấu trúc thực tế `Nhom5/` (`frontend/`, `backend/`, `ai/`).
+  - Đồng bộ Tech stack thực tế: Java 21, Spring Boot 4.1.1, Nimbus JWT (Resource Server), Vite React 19, FastAPI MobileNetV2.
+  - Giữ nguyên các biến môi trường chuẩn: `DB_USERNAME`, `JWT_EXPIRATION_MINUTES=1440`.
+
 ### Phiên bản v1.1 (21/09/2026) — Đồng bộ Auth & Bảo vệ Tuyến đường
 - **Frontend `AuthContext.jsx`**:
-  - Nhận và xử lý trường `accessToken` trả về từ Backend `AuthResponse` (thay vì chỉ `token`), lưu token chuẩn vào `localStorage["agri_token"]`.
-  - Cập nhật logic `hasRole(role)`: So sánh trực tiếp chuỗi đơn lẻ `auth.user?.role === role` (khớp với Enum `Role` của Backend: `CUSTOMER`, `SELLER`, `ADMIN`), đồng thời giữ tương thích ngược với mảng `roles`.
+  - Nhận và xử lý trường `accessToken` trả về từ Backend `AuthResponse`, lưu token chuẩn vào `localStorage["agri_token"]`.
+  - Cập nhật logic `hasRole(role)`: So sánh trực tiếp chuỗi đơn lẻ `auth.user?.role === role` (`CUSTOMER`, `SELLER`, `ADMIN`).
 - **Frontend `LoginPage.jsx`**:
-  - Cập nhật hàm `homeFor(user)` để đọc trực tiếp `user.role` và điều hướng chính xác sau khi đăng nhập:
-    - `ADMIN` → `/admin`
-    - `SELLER` → `/seller`
-    - `CUSTOMER` (mặc định) → `/`
+  - Cập nhật điều hướng chính xác theo role: `ADMIN` → `/admin`, `SELLER` → `/seller`, `CUSTOMER` → `/`.
 - **Frontend `RegisterPage.jsx`**:
-  - Bổ sung trường bắt buộc **"Xác nhận mật khẩu" (`confirmPassword`)** và validate mật khẩu trùng khớp ở client trước khi gọi API, khớp 100% với `RegisterRequest` DTO phía Backend.
-  - Loại bỏ dropdown chọn Role vì mọi đăng ký thông thường luôn tạo tài khoản `CUSTOMER` (đăng ký làm người bán sẽ qua API `POST /api/seller/register` riêng).
+  - Bổ sung trường bắt buộc **"Xác nhận mật khẩu" (`confirmPassword`)** khớp với DTO Backend. Mặc định luôn tạo tài khoản `CUSTOMER`.
 - **Frontend Route Protection (`App.jsx`)**:
-  - Bọc component [`RequireAuth`](file:///d:/Đồ%20án%20chuyên%20ngành/Nhom5/frontend/src/components/RequireAuth.jsx) bảo vệ các tuyến đường nội bộ:
-    - Tuyến `/seller`: Bắt buộc vai trò `SELLER` hoặc `ADMIN`.
-    - Tuyến `/admin`: Bắt buộc vai trò `ADMIN`.
-    - Chưa đăng nhập: Tự động điều hướng về `/login` và lưu `location` để redirect lại sau khi đăng nhập thành công.
-    - Sai quyền: Tự động điều hướng về trang chủ `/`.
+  - Bọc component [`RequireAuth`](file:///d:/Đồ%20án%20chuyên%20ngành/Nhom5/frontend/src/components/RequireAuth.jsx) bảo vệ các tuyến đường `/seller` và `/admin`.
 - **Backend `application.properties`**:
-  - Cập nhật `app.jwt.expiration-minutes=1440` (24 giờ, tương đương 86.400 giây theo đúng Mục 0.3 và 1.4) giúp phiên đăng nhập ổn định trong quá trình phát triển và kiểm thử.
-
+  - Cập nhật `app.jwt.expiration-minutes=1440` (24 giờ).
