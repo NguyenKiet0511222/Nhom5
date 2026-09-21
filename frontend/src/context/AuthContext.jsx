@@ -22,9 +22,15 @@ function readStoredAuth() {
 export function AuthProvider({ children }) {
   const [auth, setAuth] = useState(readStoredAuth);
 
-  const login = ({ token, user }) => {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  const login = (data) => {
+    const token = data?.accessToken || data?.token;
+    const user = data?.user;
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    }
+    if (user) {
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    }
     setAuth({ token, user });
   };
 
@@ -34,7 +40,12 @@ export function AuthProvider({ children }) {
     setAuth({ token: null, user: null });
   };
 
-  const hasRole = (role) => auth.user?.roles?.includes(role) ?? false;
+  const hasRole = (role) => {
+    if (!auth.user) return false;
+    if (auth.user.role === role) return true;
+    if (Array.isArray(auth.user.roles)) return auth.user.roles.includes(role);
+    return false;
+  };
 
   return (
     <AuthContext.Provider

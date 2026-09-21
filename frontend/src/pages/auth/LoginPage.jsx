@@ -16,8 +16,9 @@ import { useAuth } from "../../context/useAuth";
 
 // Trang mặc định sau đăng nhập theo vai trò
 function homeFor(user) {
-  if (user?.roles?.includes("ADMIN")) return "/admin";
-  if (user?.roles?.includes("SELLER")) return "/seller";
+  const role = user?.role;
+  if (role === "ADMIN" || user?.roles?.includes("ADMIN")) return "/admin";
+  if (role === "SELLER" || user?.roles?.includes("SELLER")) return "/seller";
   return "/";
 }
 

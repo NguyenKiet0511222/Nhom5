@@ -4,6 +4,8 @@ Bộ nhớ chung cho Claude Code và thành viên nhóm. Đọc trước khi cod
 Tài liệu gốc:
 - Đặc tả + lộ trình 10 tuần: https://docs.google.com/document/d/1P3Km5mr04dpobGkg5GQQJQCycblGKlW9/edit
 - Thiết kế auth (đăng ký/đăng nhập/phân quyền, Hà viết): https://docs.google.com/document/d/1zs8B7gs4j4jjKnYCWq3yFq3NYwvYiNR0/edit
+- **Đặc tả API & Nghiệp vụ (Single Source of Truth)**: [`docs/api.md`](docs/api.md)
+
 
 ## 1. Dự án
 

@@ -4,6 +4,7 @@ import { CartProvider } from "./context/CartContext";
 import CustomerLayout from "./layouts/CustomerLayout";
 import DashboardLayout from "./layouts/DashboardLayout";
 import ComingSoon from "./components/ComingSoon";
+import RequireAuth from "./components/RequireAuth";
 import HomePage from "./pages/customer/HomePage";
 import ProductsPage from "./pages/customer/ProductsPage";
 import AIClassifierPage from "./pages/customer/AIClassifierPage";
@@ -12,10 +13,6 @@ import RegisterPage from "./pages/auth/RegisterPage";
 import SellerDashboardPage from "./pages/seller/SellerDashboardPage";
 import AdminDashboardPage from "./pages/admin/AdminDashboardPage";
 import "./App.css";
-
-// TODO (tuần 3): khi có API đăng nhập, bọc khu seller/admin bằng RequireAuth:
-//   <Route path="/seller" element={<RequireAuth roles={["SELLER", "ADMIN"]}><DashboardLayout role="seller" /></RequireAuth>}>
-//   <Route path="/admin"  element={<RequireAuth roles={["ADMIN"]}><DashboardLayout role="admin" /></RequireAuth>}>
 
 export default function App() {
   return (
@@ -32,14 +29,28 @@ export default function App() {
               <Route path="/register" element={<RegisterPage />} />
             </Route>
 
-            {/* Khu người bán (MUI dashboard) */}
-            <Route path="/seller" element={<DashboardLayout role="seller" />}>
+            {/* Khu người bán (MUI dashboard, yêu cầu vai trò SELLER hoặc ADMIN) */}
+            <Route
+              path="/seller"
+              element={
+                <RequireAuth roles={["SELLER", "ADMIN"]}>
+                  <DashboardLayout role="seller" />
+                </RequireAuth>
+              }
+            >
               <Route index element={<SellerDashboardPage />} />
               <Route path="*" element={<ComingSoon />} />
             </Route>
 
-            {/* Khu quản trị (MUI dashboard) */}
-            <Route path="/admin" element={<DashboardLayout role="admin" />}>
+            {/* Khu quản trị (MUI dashboard, yêu cầu vai trò ADMIN) */}
+            <Route
+              path="/admin"
+              element={
+                <RequireAuth roles={["ADMIN"]}>
+                  <DashboardLayout role="admin" />
+                </RequireAuth>
+              }
+            >
               <Route index element={<AdminDashboardPage />} />
               <Route path="*" element={<ComingSoon />} />
             </Route>

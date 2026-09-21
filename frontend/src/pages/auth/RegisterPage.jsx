@@ -6,21 +6,20 @@ import {
   Button,
   Container,
   Link,
-  MenuItem,
   Paper,
   TextField,
   Typography
 } from "@mui/material";
 import { authApi } from "../../services/api";
 
-const ROLE_OPTIONS = [
-  { value: "CUSTOMER", label: "Khách hàng" },
-  { value: "SELLER", label: "Người bán (cần admin xác minh shop)" }
-];
-
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ fullName: "", email: "", password: "", role: "CUSTOMER" });
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    confirmPassword: ""
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -29,14 +28,25 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (form.password !== form.confirmPassword) {
+      setError("Mật khẩu xác nhận không khớp");
+      return;
+    }
+
     setLoading(true);
     try {
-      await authApi.register(form);
+      await authApi.register({
+        fullName: form.fullName,
+        email: form.email,
+        password: form.password,
+        confirmPassword: form.confirmPassword
+      });
       navigate("/login", { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.message ||
-          "Đăng ký thất bại. Backend chưa có API /api/auth/register (lộ trình tuần 3)?"
+          "Đăng ký thất bại. Vui lòng kiểm tra lại thông tin."
       );
     } finally {
       setLoading(false);
@@ -87,13 +97,16 @@ export default function RegisterPage() {
             autoComplete="new-password"
             slotProps={{ htmlInput: { minLength: 6 } }}
           />
-          <TextField select label="Bạn là" name="role" value={form.role} onChange={handleChange}>
-            {ROLE_OPTIONS.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </MenuItem>
-            ))}
-          </TextField>
+          <TextField
+            label="Xác nhận mật khẩu"
+            name="confirmPassword"
+            type="password"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            required
+            autoComplete="new-password"
+            slotProps={{ htmlInput: { minLength: 6 } }}
+          />
           <Button type="submit" variant="contained" size="large" disabled={loading}>
             {loading ? "Đang tạo tài khoản..." : "Đăng ký"}
           </Button>
